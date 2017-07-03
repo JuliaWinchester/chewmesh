@@ -18,9 +18,11 @@ meshes. As a result, the total number of files saved will equal:
 @author: Julie Winchester
 '''
 import inspect
-from os import listdir, makedirs, remove, rmdir
+from os import listdir, makedirs, remove
 from os.path import isfile, join, exists
+from shutil import copy2, rmtree
 from subprocess import call
+from warnings import warn
 
 def write_simplify_script(file_dir, out_dir, file_name, script, simp_target):
 	if simp_target == 'None':
@@ -53,32 +55,49 @@ def write_smooth_script(file_dir, out_dir, file_name, script, smooth_iter):
 	return
 
 app_bin = '/Applications/Amira-5.3.2/Amira.app/Contents/MacOS/Amira'
-mesh_dir = '/Users/Julie/Documents/Code/chewmesh/meshes'
-output_dir = '/Users/Julie/Documents/Code/chewmesh/output'
+mesh_dir = '/Users/julie/data/prime/sample_meshes/platyrrhine_fossil'
+output_dir = '/Users/julie/data/prime/sample_meshes/platyrrhine_fossil/simp_smooth'
 
-simplification_levels = [100, 1000, 2500, 5000, 10000, 15000, 20000, 30000, 50000, 100000]
-smoothing_levels = [50, 100]
+simplification_levels = [10000]
+smoothing_levels = [100]
 
 if not exists(output_dir):
 	makedirs(output_dir)
 if not exists(join(output_dir, 'temp')):
 	makedirs(join(output_dir, 'temp'))
 
+error_files = []
+
 for file in [f for f in listdir(mesh_dir) if isfile(join(mesh_dir, f))]:
+	if ' ' in file:
+		new_file = file.replace(' ', '_')
+		copy2(join(mesh_dir, file), join(output_dir, 'temp', new_file))
+		base_dir = join(output_dir, 'temp')
+	else:
+		base_dir = mesh_dir
+
 	hx_script = open(join(output_dir, 'temp', 'script.hx'), 'wb')
 	hx_script.write('# Amira Script\n')
 
 	for simp_target in simplification_levels:
-		simp_file = write_simplify_script(mesh_dir, output_dir, file, hx_script, simp_target)
+		simp_file = write_simplify_script(base_dir, output_dir, file, hx_script, simp_target)
 		for smooth_iter in smoothing_levels:
-			write_smooth_script(mesh_dir, output_dir, simp_file, hx_script, smooth_iter)
+			write_smooth_script(base_dir, output_dir, simp_file, hx_script, smooth_iter)
 		hx_script.write('remove ' + simp_file + '\n')
 
 	hx_script.close()
 	call([app_bin, '-no_gui', join(output_dir, 'temp', 'script.hx')])
+	if not isfile(join(output_dir, simp_file)):
+		warn('WARNING: Error simplifying and/or smoothing mesh {}'.format(simp_file))
+		error_files.append(simp_file)
+
+if len(error_files) > 0:
+	msg = 'WARNING: Error simplifying and/or smoothing one or more meshes. ' \
+	      'List of problematic meshes: {}'.format(' '.join(error_files))
+	warn(msg)
 
 remove(join(output_dir, 'temp', 'script.hx'))
-rmdir(join(output_dir, 'temp'))
+rmtree(join(output_dir, 'temp'))
 
 
 
